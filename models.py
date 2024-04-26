@@ -10,7 +10,7 @@ class User(db.Model):
     email = db.Column(db.String(200), nullable=False, unique=True)
     profile = db.relationship('Profile', backref='user', uselist=False)
     tickets = db.relationship('SupportTicket', backref='user')
-    reviews = db.relationship('Review', backref='user', foreign_keys='Review.user_id')
+    reviews = db.relationship('Review', backref='user')#***********
 
 class Profile(db.Model):
     __tablename__ = 'profile'
@@ -23,10 +23,10 @@ class Profile(db.Model):
     role = db.Column(db.String(50))
     usuario_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     services = db.relationship('Service', backref='profile')
-    messages_sent = db.relationship('Message', foreign_keys='Message.client_id', backref='client')
-    messages_received = db.relationship('Message', foreign_keys='Message.provider_id', backref='provider')
+    messages_sent = db.relationship('Message', backref='client')#***********
+    messages_received = db.relationship('Message', backref='provider')#***********
     event_packs = db.relationship('EventPack', backref='profile')
-    reservations = db.relationship('Reservation', foreign_keys='Reservation.proveedor_id', backref='profile')
+    reservations = db.relationship('Reservation', backref='profile')#***********
 
 class Message(db.Model):
     __tablename__ = 'message'
@@ -34,7 +34,7 @@ class Message(db.Model):
     content = db.Column(db.Text, nullable=False)
     client_id = db.Column(db.Integer, db.ForeignKey('profile.id'), nullable=False)
     provider_id = db.Column(db.Integer, db.ForeignKey('profile.id'), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow())
 
 class Service(db.Model):
     __tablename__ = 'service'

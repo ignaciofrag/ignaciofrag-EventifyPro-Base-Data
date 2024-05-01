@@ -97,3 +97,5 @@ class Review(db.Model):
     score = db.Column(db.Integer)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     service_id = db.Column(db.Integer, db.ForeignKey('service.id'))
+
+    #test

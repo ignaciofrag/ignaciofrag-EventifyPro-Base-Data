@@ -1,31 +1,16 @@
 from flask import Flask, request, jsonify
+from models import db, User, Profile, Message, Service, SupportTicket, EventPack, Media, Promotion, Reservation, Review
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-import json
-from models import db, User, Profile, Message, Service, SupportTicket, EventPack, Media, Promotion, Reservation, Review
 
 app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///eventify.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
-db = SQLAlchemy(app)
+# Inicializa la extensión de SQLAlchemy
+db.init_app(app)
+# Configura las migraciones
 migrate = Migrate(app, db)
-
-class User(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    email = db.Column(db.String(120), unique=True, nullable=False)
-    password = db.Column(db.String(120), nullable=False)
-
-class Profile(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    phone_number = db.Column(db.String(20))
-    address = db.Column(db.String(120))
-    description = db.Column(db.Text)
-    company_name = db.Column(db.String(120))
-    url_portfolio = db.Column(db.String(255))
-    role = db.Column(db.String(120))
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    user = db.relationship('User', backref=db.backref('profiles', lazy=True))
 
 @app.route('/user/<int:user_id>', methods=['GET'])
 def get_user(user_id):
@@ -109,6 +94,5 @@ def delete_profile(profile_id):
     db.session.delete(profile)
     db.session.commit()
     return jsonify({'message': 'Perfil eliminado exitosamente'}), 200
-
 if __name__ == '__main__':
     app.run(host='localhost', port=5000, debug=True)

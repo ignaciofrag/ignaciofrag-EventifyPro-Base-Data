@@ -23,11 +23,20 @@ class Profile(db.Model):
     role = db.Column(db.String(50))
     usuario_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     services = db.relationship('Service', backref='profile')
-    messages_sent = db.relationship('Message', backref='client')#***********
-    messages_received = db.relationship('Message', backref='provider')#***********
-    event_packs = db.relationship('EventPack', backref='profile')
-    reservations = db.relationship('Reservation', backref='profile')#***********
 
+    # Especificar las llaves foráneas para evitar ambigüedades en las relaciones
+    messages_sent = db.relationship(
+        'Message',
+        foreign_keys='[Message.client_id]',
+        backref=db.backref('client', lazy='joined')
+    )
+    messages_received = db.relationship(
+        'Message',
+        foreign_keys='[Message.provider_id]',
+        backref=db.backref('provider', lazy='joined')
+    )
+    event_packs = db.relationship('EventPack', backref='profile')
+    reservations = db.relationship('Reservation', backref='profile')
 class Message(db.Model):
     __tablename__ = 'message'
     id = db.Column(db.Integer, primary_key=True)

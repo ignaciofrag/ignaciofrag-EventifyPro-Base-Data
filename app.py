@@ -57,7 +57,6 @@ def create_user():
         return jsonify({'message': 'Datos insuficientes para la creación del usuario'}), 400
     
     try:
-        # Crear el usuario
         user = User(
             email=data['email'],
             password=data['password'],
@@ -67,11 +66,10 @@ def create_user():
         db.session.add(user)
         db.session.flush()  # Obtener el ID antes de commit para usarlo en el perfil
 
-        # Comprobar si hay datos para el perfil y crear el perfil
         if 'profile' in data:
             profile_data = data['profile']
             profile = Profile(
-                usuario_id=user.id,  # Usar el ID del usuario recién creado
+                usuario_id=user.id,
                 phone_number=profile_data.get('phone_number'),
                 address=profile_data.get('address'),
                 description=profile_data.get('description'),
@@ -81,11 +79,14 @@ def create_user():
             )
             db.session.add(profile)
         
-        db.session.commit()  # Hacer commit de la transacción para guardar el usuario y perfil
+        db.session.commit()
         return jsonify({'message': 'Usuario y perfil creados exitosamente', 'id': user.id}), 201
     except Exception as e:
         db.session.rollback()
+        print(f"Error: {e}")  # Agregar impresión del error
         return jsonify({'message': 'Error al crear el usuario', 'error': str(e)}), 500
+    
+
 @app.route('/user/login', methods=['POST'])
 def login_user():
     data = request.json

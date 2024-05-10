@@ -97,20 +97,34 @@ def login_user():
             'email': user.email,
             'first_name': user.first_name,
             'last_name': user.last_name,
+            'role': user.profile.role  # cliente o proveedor
+
             # Añade otros campos necesarios aquí
         }
         return jsonify({'message': 'Login exitoso', 'user': user_info}), 200
     else:
         return jsonify({'message': 'Credenciales incorrectas'}), 401
 
+    # Actualizar los datos del usuario
 @app.route('/user/<int:user_id>', methods=['PUT'])
 def update_user(user_id):
     user = User.query.get(user_id)
     if not user:
         return jsonify({'message': 'Usuario no encontrado'}), 404
     data = request.json
-    user.password = data.get('password', user.password)
+    user.first_name = data.get('first_name', user.first_name)
+    user.last_name = data.get('last_name', user.last_name)
     user.email = data.get('email', user.email)
+    if 'password' in data and data['password']:
+        user.password = data['password']  # Consideremos hashing de contraseña italo
+    if 'profile' in data:
+        profile = user.profile
+        if profile:
+            profile.phone_number = data['profile'].get('phone_number', profile.phone_number)
+            profile.address = data['profile'].get('address', profile.address)
+            profile.description = data['profile'].get('description', profile.description)
+            profile.company_name = data['profile'].get('company_name', profile.company_name)
+            profile.url_portfolio = data['profile'].get('url_portfolio', profile.url_portfolio)
     db.session.commit()
     return jsonify({'message': 'Usuario actualizado exitosamente'}), 200
 

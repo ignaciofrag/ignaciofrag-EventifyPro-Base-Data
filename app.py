@@ -53,20 +53,25 @@ def get_all_users():
 @app.route('/user', methods=['POST'])
 def create_user():
     data = request.json
-    if not data or 'email' not in data or 'password' not in data:
+    if not data or 'email' not in data or 'password' not in data or 'first_name' not in data or 'last_name' not in data:
         return jsonify({'message': 'Datos insuficientes para la creación del usuario'}), 400
     
     try:
         # Crear el usuario
-        user = User(email=data['email'], password=data['password'])
+        user = User(
+            email=data['email'],
+            password=data['password'],
+            first_name=data['first_name'],
+            last_name=data['last_name']
+        )
         db.session.add(user)
-        db.session.commit()  # Commit para obtener el ID generado para el usuario
+        db.session.flush()  # Obtener el ID antes de commit para usarlo en el perfil
 
         # Comprobar si hay datos para el perfil y crear el perfil
         if 'profile' in data:
             profile_data = data['profile']
             profile = Profile(
-                usuario_id=user.id,  # Uso correcto de usuario_id según tu modelo
+                usuario_id=user.id,  # Usar el ID del usuario recién creado
                 phone_number=profile_data.get('phone_number'),
                 address=profile_data.get('address'),
                 description=profile_data.get('description'),
@@ -75,21 +80,25 @@ def create_user():
                 role=profile_data.get('role')
             )
             db.session.add(profile)
-            db.session.commit()  # Hacer commit de la transacción para guardar el perfil
-            return jsonify({'message': 'Usuario y perfil creados exitosamente', 'id': user.id}), 201
-        else:
-            return jsonify({'message': 'Usuario creado sin perfil', 'id': user.id}), 201
-
+        
+        db.session.commit()  # Hacer commit de la transacción para guardar el usuario y perfil
+        return jsonify({'message': 'Usuario y perfil creados exitosamente', 'id': user.id}), 201
     except Exception as e:
         db.session.rollback()
         return jsonify({'message': 'Error al crear el usuario', 'error': str(e)}), 500
-
 @app.route('/user/login', methods=['POST'])
 def login_user():
     data = request.json
     user = User.query.filter_by(email=data['email']).first()
     if user and user.password == data['password']:
-        return jsonify({'message': 'Login exitoso', 'id': user.id}), 200
+        user_info = {
+            'id': user.id,
+            'email': user.email,
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+            # Añade otros campos necesarios aquí
+        }
+        return jsonify({'message': 'Login exitoso', 'user': user_info}), 200
     else:
         return jsonify({'message': 'Credenciales incorrectas'}), 401
 

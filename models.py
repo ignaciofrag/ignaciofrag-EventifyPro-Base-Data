@@ -9,6 +9,8 @@ class User(db.Model):
     password = db.Column(db.String(50), nullable=False)
     email = db.Column(db.String(200), nullable=False, unique=True)
     profile = db.relationship('Profile', backref='user', uselist=False)
+    first_name = db.Column(db.String(100), nullable=False)
+    last_name = db.Column(db.String(100), nullable=False)
     tickets = db.relationship('SupportTicket', backref='user')
     reviews = db.relationship('Review', backref='user')#***********
 
@@ -18,7 +20,7 @@ class Profile(db.Model):
     phone_number = db.Column(db.String(50))
     address = db.Column(db.String(200))
     description = db.Column(db.Text)
-    company_name = db.Column(db.String(200))
+    company_name = db.Column(db.String(200), nullable=True)  # Opcional
     url_portfolio = db.Column(db.String(200))
     role = db.Column(db.String(50))
     usuario_id = db.Column(db.Integer, db.ForeignKey('user.id'))

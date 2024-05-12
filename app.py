@@ -56,6 +56,11 @@ def create_user():
     if not data or 'email' not in data or 'password' not in data or 'first_name' not in data or 'last_name' not in data:
         return jsonify({'message': 'Datos insuficientes para la creación del usuario'}), 400
     
+    existing_user = User.query.filter_by(email=data['email']).first()
+    if existing_user:
+        return jsonify({'message': 'El correo electrónico ya está registrado'}), 409
+
+
     try:
         user = User(
             email=data['email'],
@@ -184,7 +189,8 @@ def get_services():
         'type': service.type,
         'price': service.price,
         'description': service.description,
-        'profile_id': service.profile_id
+        'profile_id': service.profile_id,
+        'first_name': service.profile.user.first_name
     } for service in services]
     return jsonify(services_data), 200
 

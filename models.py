@@ -98,6 +98,8 @@ class Reservation(db.Model):
     proveedor_id = db.Column(db.Integer, db.ForeignKey('event_pack.id'))
     paquete_evento_id = db.Column(db.Integer, db.ForeignKey('profile.id'))
     usuario_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    service_id = db.Column(db.Integer, db.ForeignKey('service.id'))  # Asegúrate de que 'service' es correcto
+    service = db.relationship('Service', backref='reservations')
 
 class Review(db.Model):
     __tablename__ = 'review'
@@ -108,5 +110,4 @@ class Review(db.Model):
     score = db.Column(db.Integer)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     service_id = db.Column(db.Integer, db.ForeignKey('service.id'))
-
     #test

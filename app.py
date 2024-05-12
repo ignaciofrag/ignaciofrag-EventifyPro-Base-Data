@@ -4,6 +4,8 @@ from flask_cors import CORS
 from models import db, User, Profile, Message, Service, SupportTicket, EventPack, Media, Promotion, Reservation, Review
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
+from flask import g  # IMPLEMENTADO para almacenar y acceder al usuario durante la petición, para la implementacion de tokens
+
 
 app = Flask(__name__)
 CORS(app, supports_credentials=True)
@@ -159,40 +161,53 @@ def get_profile(profile_id):
     }), 200
 
 
-#-------------SERVICES-----------------------------#
+#-----------------------------------------SERVICES-----------------------------#
 #-----------------------proveedores puedan añadir servicios que ofrecen.-----------------------------#
 @app.route('/services', methods=['POST'])
 def create_service():
+    if not g.user:
+        return jsonify({'message': 'No autenticado'}), 401
+    
     data = request.json
+    profile = Profile.query.filter_by(usuario_id=g.user.id).first()  # Asume que g.user contiene al usuario autenticado
+
+    if not profile:
+        return jsonify({'message': 'Perfil no encontrado para el usuario autenticado'}), 404
+
     try:
         new_service = Service(
             name=data['name'],
             type=data['type'],
             price=data['price'],
             description=data['description'],
-            profile_id=data['profile_id']
+            profile_id=profile.id
         )
         db.session.add(new_service)
         db.session.commit()
-        return jsonify(new_service.id), 201
+        return jsonify({'id': new_service.id}), 201
     except Exception as e:
         db.session.rollback()
         return jsonify({'message': 'Error al crear el servicio', 'error': str(e)}), 500
 
+
 #----------------------- clientes puedan ver los servicios disponibles..-----------------------------#
 @app.route('/services', methods=['GET'])
 def get_services():
-    services = Service.query.all()
-    services_data = [{
-        'id': service.id,
-        'name': service.name,
-        'type': service.type,
-        'price': service.price,
-        'description': service.description,
-        'profile_id': service.profile_id,
-        'first_name': service.profile.user.first_name
-    } for service in services]
-    return jsonify(services_data), 200
+    try:
+        services = Service.query.all()
+        services_data = [{
+            'id': service.id,
+            'name': service.name,
+            'type': service.type,
+            'price': service.price,
+            'description': service.description,
+            'profile_id': service.profile_id,
+            'first_name': service.profile.user.first_name if service.profile and service.profile.user else 'N/A',
+            'last_name': service.profile.user.last_name if service.profile and service.profile.user else 'N/A'
+        } for service in services]
+        return jsonify(services_data), 200
+    except Exception as e:
+        return jsonify({'message': 'Error al obtener los servicios', 'error': str(e)}), 500
 
 #----------------------- Crear una reserva-Para que los clientes puedan reservar servicios específicos..-----------------------------#
 @app.route('/reservations', methods=['POST'])

@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify
+from datetime import datetime
 from flask_cors import CORS
 from models import db, User, Profile, Message, Service, SupportTicket, EventPack, Media, Promotion, Reservation, Review
 from flask_sqlalchemy import SQLAlchemy
@@ -13,7 +14,6 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db.init_app(app)
 migrate = Migrate(app, db)
-
 @app.route('/user/<int:user_id>', methods=['GET'])
 def get_user(user_id):
     user = User.query.get(user_id)
@@ -152,6 +152,79 @@ def get_profile(profile_id):
         'role': profile.role,
         'user_id': profile.user_id
     }), 200
+
+
+#-------------SERVICES-----------------------------#
+#-----------------------proveedores puedan añadir servicios que ofrecen.-----------------------------#
+@app.route('/services', methods=['POST'])
+def create_service():
+    data = request.json
+    try:
+        new_service = Service(
+            name=data['name'],
+            type=data['type'],
+            price=data['price'],
+            description=data['description'],
+            profile_id=data['profile_id']
+        )
+        db.session.add(new_service)
+        db.session.commit()
+        return jsonify(new_service.id), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': 'Error al crear el servicio', 'error': str(e)}), 500
+
+#----------------------- clientes puedan ver los servicios disponibles..-----------------------------#
+@app.route('/services', methods=['GET'])
+def get_services():
+    services = Service.query.all()
+    services_data = [{
+        'id': service.id,
+        'name': service.name,
+        'type': service.type,
+        'price': service.price,
+        'description': service.description,
+        'profile_id': service.profile_id
+    } for service in services]
+    return jsonify(services_data), 200
+
+#----------------------- Crear una reserva-Para que los clientes puedan reservar servicios específicos..-----------------------------#
+@app.route('/reservations', methods=['POST'])
+def create_reservation():
+    data = request.json
+    try:
+        # Convertir la cadena de texto ISO a un objeto datetime de Python
+        if 'date_time_reservation' in data:
+            data['date_time_reservation'] = datetime.fromisoformat(data['date_time_reservation'])
+
+        # Crear la instancia de la reserva
+        reservation = Reservation(
+            status=data['status'],
+            date_time_reservation=data['date_time_reservation'],
+            precio=data['precio'],
+            proveedor_id=data['proveedor_id'],
+            paquete_evento_id=data['paquete_evento_id'],
+            usuario_id=data['usuario_id']
+        )
+        db.session.add(reservation)
+        db.session.commit()
+        return jsonify({'message': 'Reserva creada exitosamente'}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e), 'message': 'Error al crear la reserva'}), 500
+#----------------------- GET RESERVATION.-----------------------------#
+
+@app.route('/reservations', methods=['GET'])
+def get_reservations():
+    reservations = Reservation.query.all()
+    reservation_list = [{
+        'id': reservation.id,
+        'name': reservation.service.name,  # Asegúrate de que 'service' está relacionado correctamente en el modelo
+        'date_time_reservation': reservation.date_time_reservation.isoformat(),
+        'guestCount': reservation.guest_count,  # Asume que tienes un campo 'guest_count'
+        'status': reservation.status
+    } for reservation in reservations]
+    return jsonify(reservation_list), 200
 
 if __name__ == '__main__':
     app.run(host='localhost', port=5500, debug=True)

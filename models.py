@@ -1,18 +1,22 @@
+from datetime import datetime
 from flask_sqlalchemy import SQLAlchemy
 import datetime
 
 db = SQLAlchemy()
 
+
 class User(db.Model):
     __tablename__ = 'user'
     id = db.Column(db.Integer, primary_key=True)
-    password = db.Column(db.String(50), nullable=False)
+    password = db.Column(db.String(128), nullable=False)
     email = db.Column(db.String(200), nullable=False, unique=True)
-    profile = db.relationship('Profile', backref='user', uselist=False)
     first_name = db.Column(db.String(100), nullable=False)
     last_name = db.Column(db.String(100), nullable=False)
+    profile = db.relationship('Profile', backref='user', uselist=False)
     tickets = db.relationship('SupportTicket', backref='user')
-    reviews = db.relationship('Review', backref='user')#***********
+    reviews = db.relationship('Review', backref='user')
+    events = db.relationship('Event', back_populates='user')  # Cambiado a back_populates
+
 
 class Profile(db.Model):
     __tablename__ = 'profile'
@@ -20,7 +24,7 @@ class Profile(db.Model):
     phone_number = db.Column(db.String(50))
     address = db.Column(db.String(200))
     description = db.Column(db.Text)
-    company_name = db.Column(db.String(200), nullable=True)  # Opcional
+    company_name = db.Column(db.String(200), nullable=True)
     url_portfolio = db.Column(db.String(200))
     role = db.Column(db.String(50))
     usuario_id = db.Column(db.Integer, db.ForeignKey('user.id'))
@@ -39,13 +43,18 @@ class Profile(db.Model):
     )
     event_packs = db.relationship('EventPack', backref='profile')
     reservations = db.relationship('Reservation', backref='profile')
+
+
 class Message(db.Model):
     __tablename__ = 'message'
     id = db.Column(db.Integer, primary_key=True)
     content = db.Column(db.Text, nullable=False)
-    client_id = db.Column(db.Integer, db.ForeignKey('profile.id'), nullable=False)
-    provider_id = db.Column(db.Integer, db.ForeignKey('profile.id'), nullable=False)
+    client_id = db.Column(db.Integer, db.ForeignKey(
+        'profile.id'), nullable=False)
+    provider_id = db.Column(
+        db.Integer, db.ForeignKey('profile.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow())
+
 
 class Service(db.Model):
     __tablename__ = 'service'
@@ -58,6 +67,7 @@ class Service(db.Model):
     reviews = db.relationship('Review', backref='service')
     media = db.relationship('Media', backref='service')
 
+
 class SupportTicket(db.Model):
     __tablename__ = 'support_ticket'
     id = db.Column(db.Integer, primary_key=True)
@@ -66,6 +76,7 @@ class SupportTicket(db.Model):
     status = db.Column(db.String(50), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
 
+
 class EventPack(db.Model):
     __tablename__ = 'event_pack'
     id = db.Column(db.Integer, primary_key=True)
@@ -73,12 +84,14 @@ class EventPack(db.Model):
     price = db.Column(db.Float)
     provider_id = db.Column(db.Integer, db.ForeignKey('profile.id'))
 
+
 class Media(db.Model):
     __tablename__ = 'media'
     id = db.Column(db.Integer, primary_key=True)
     type = db.Column(db.String(50), nullable=False)
     url = db.Column(db.String(200), nullable=False)
     service_id = db.Column(db.Integer, db.ForeignKey('service.id'))
+
 
 class Promotion(db.Model):
     __tablename__ = 'promotion'
@@ -89,6 +102,7 @@ class Promotion(db.Model):
     price = db.Column(db.Float)
     provider_id = db.Column(db.Integer, db.ForeignKey('profile.id'))
 
+
 class Reservation(db.Model):
     __tablename__ = 'reservation'
     id = db.Column(db.Integer, primary_key=True)
@@ -98,8 +112,10 @@ class Reservation(db.Model):
     proveedor_id = db.Column(db.Integer, db.ForeignKey('event_pack.id'))
     paquete_evento_id = db.Column(db.Integer, db.ForeignKey('profile.id'))
     usuario_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    service_id = db.Column(db.Integer, db.ForeignKey('service.id'))  # Asegúrate de que 'service' es correcto
+    # Asegúrate de que 'service' es correcto
+    service_id = db.Column(db.Integer, db.ForeignKey('service.id'))
     service = db.relationship('Service', backref='reservations')
+
 
 class Review(db.Model):
     __tablename__ = 'review'
@@ -110,4 +126,21 @@ class Review(db.Model):
     score = db.Column(db.Integer)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     service_id = db.Column(db.Integer, db.ForeignKey('service.id'))
-    #test
+
+class Event(db.Model):
+    __tablename__ = 'events'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(255), nullable=False)
+    date = db.Column(db.DateTime, nullable=False)
+    location = db.Column(db.String(255), nullable=False)
+    details = db.Column(db.Text, nullable=True)
+    guests = db.Column(db.Integer, nullable=False)
+    eventype = db.Column(db.String(255), nullable=False, server_default='Default')
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    user = db.relationship('User', back_populates='events')
+
+def __repr__(self):
+    return f'<Event {self.name}>'
+
+
+    # test

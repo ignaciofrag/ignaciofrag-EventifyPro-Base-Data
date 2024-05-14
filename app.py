@@ -1,39 +1,78 @@
 from flask import Flask, request, jsonify
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask_cors import CORS
-from models import db, User, Profile, Message, Service, SupportTicket, EventPack, Media, Promotion, Reservation, Review
+from models import db, User, Profile, Message, Service, SupportTicket, EventPack, Media, Promotion, Reservation, Review, Event
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-from flask import g  # IMPLEMENTADO para almacenar y acceder al usuario durante la petición, para la implementacion de tokens
+from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
+from werkzeug.security import generate_password_hash
 
 
 app = Flask(__name__)
-CORS(app, supports_credentials=True)
-# Configuración de CORS mejorada
-print("CORS configurado correctamente")
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///eventify.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+# Cambiar esto por una clave más segura
+app.config['JWT_SECRET_KEY'] = 'super-secret'
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=1)
 
 db.init_app(app)
 migrate = Migrate(app, db)
-@app.route('/user/<int:user_id>', methods=['GET'])
-def get_user(user_id):
-    user = User.query.get(user_id)
-    if not user:
-        return jsonify({'message': 'Usuario no encontrado'}), 404
-    user_data = {
-        'id': user.id,
-        'email': user.email,
-        'profile': {
-            'phone_number': user.profile.phone_number if user.profile else None,
-            'address': user.profile.address if user.profile else None,
-            'description': user.profile.description if user.profile else None,
-            'company_name': user.profile.company_name if user.profile else None,
-            'url_portfolio': user.profile.url_portfolio if user.profile else None,
-            'role': user.profile.role if user.profile else None
-        } if user.profile else {}
-    }
-    return jsonify(user_data), 200
+jwt = JWTManager(app)
+
+# Configurar CORS
+CORS(app)
+
+
+@app.route('/user/login', methods=['POST'])
+def login_user():
+    email = request.json.get('email', None)
+    password = request.json.get('password', None)
+    user = User.query.filter_by(email=email).first()
+    if user and user.password == password:  # Aquí también debes considerar usar hashing para las contraseñas
+        access_token = create_access_token(identity=user.id)
+        user_info = {
+            'id': user.id,
+            'email': user.email,
+            'role': user.profile.role,
+            'first_name': user.first_name,
+            'last_name': user.last_name
+        }
+        return jsonify(access_token=access_token, user=user_info), 200
+    else:
+        return jsonify({"msg": "Bad username or password"}), 401
+
+########################REGISTRO########################
+@app.route('/user', methods=['POST'])
+def create_user():
+    data = request.json
+    if User.query.filter_by(email=data['email']).first():
+        return jsonify({"msg": "Email already exists"}), 409
+    try:
+        user = User(
+            email=data['email'],
+            password=generate_password_hash(data['password']),  # Hasheada la contraseña con werkzeug
+            first_name=data['first_name'],
+            last_name=data['last_name']
+        )
+        profile = Profile(
+            user=user,
+            phone_number=data['profile']['phone_number'],
+            address=data['profile']['address'],
+            description=data['profile']['description'],
+            company_name=data['profile']['company_name'],
+            url_portfolio=data['profile']['url_portfolio'],
+            role=data['profile']['role']
+        )
+        db.session.add(user)
+        db.session.add(profile)
+        db.session.commit()
+
+        access_token = create_access_token(identity={'email': user.email, 'role': profile.role})
+
+        return jsonify({"msg": "User created successfully", "user_id": user.id, "access_token": access_token}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"msg": f"Error creating user: {str(e)}"}), 500
 
 @app.route('/users', methods=['GET'])
 def get_all_users():
@@ -52,200 +91,205 @@ def get_all_users():
     } for user in users]
     return jsonify(users_list), 200
 
-@app.route('/user', methods=['POST'])
-def create_user():
-    data = request.json
-    if not data or 'email' not in data or 'password' not in data or 'first_name' not in data or 'last_name' not in data:
-        return jsonify({'message': 'Datos insuficientes para la creación del usuario'}), 400
-    
-    existing_user = User.query.filter_by(email=data['email']).first()
-    if existing_user:
-        return jsonify({'message': 'El correo electrónico ya está registrado'}), 409
 
-
-    try:
-        user = User(
-            email=data['email'],
-            password=data['password'],
-            first_name=data['first_name'],
-            last_name=data['last_name']
-        )
-        db.session.add(user)
-        db.session.flush()  # Obtener el ID antes de commit para usarlo en el perfil
-
-        if 'profile' in data:
-            profile_data = data['profile']
-            profile = Profile(
-                usuario_id=user.id,
-                phone_number=profile_data.get('phone_number'),
-                address=profile_data.get('address'),
-                description=profile_data.get('description'),
-                company_name=profile_data.get('company_name'),
-                url_portfolio=profile_data.get('url_portfolio'),
-                role=profile_data.get('role')
-            )
-            db.session.add(profile)
-        
-        db.session.commit()
-        return jsonify({'message': 'Usuario y perfil creados exitosamente', 'id': user.id}), 201
-    except Exception as e:
-        db.session.rollback()
-        print(f"Error: {e}")  # Agregar impresión del error
-        return jsonify({'message': 'Error al crear el usuario', 'error': str(e)}), 500
-    
-
-@app.route('/user/login', methods=['POST'])
-def login_user():
-    data = request.json
-    user = User.query.filter_by(email=data['email']).first()
-    if user and user.password == data['password']:
-        user_info = {
-            'id': user.id,
-            'email': user.email,
-            'first_name': user.first_name,
-            'last_name': user.last_name,
-            'role': user.profile.role  # cliente o proveedor
-
-            # Añade otros campos necesarios aquí
-        }
-        return jsonify({'message': 'Login exitoso', 'user': user_info}), 200
-    else:
-        return jsonify({'message': 'Credenciales incorrectas'}), 401
-
-    # Actualizar los datos del usuario
-@app.route('/user/<int:user_id>', methods=['PUT'])
-def update_user(user_id):
-    user = User.query.get(user_id)
-    if not user:
-        return jsonify({'message': 'Usuario no encontrado'}), 404
-    data = request.json
-    user.first_name = data.get('first_name', user.first_name)
-    user.last_name = data.get('last_name', user.last_name)
-    user.email = data.get('email', user.email)
-    if 'password' in data and data['password']:
-        user.password = data['password']  # Consideremos hashing de contraseña italo
-    if 'profile' in data:
-        profile = user.profile
-        if profile:
-            profile.phone_number = data['profile'].get('phone_number', profile.phone_number)
-            profile.address = data['profile'].get('address', profile.address)
-            profile.description = data['profile'].get('description', profile.description)
-            profile.company_name = data['profile'].get('company_name', profile.company_name)
-            profile.url_portfolio = data['profile'].get('url_portfolio', profile.url_portfolio)
-    db.session.commit()
-    return jsonify({'message': 'Usuario actualizado exitosamente'}), 200
-
-@app.route('/user/<int:user_id>', methods=['DELETE'])
-def delete_user(user_id):
-    user = User.query.get(user_id)
-    if not user:
-        return jsonify({'message': 'Usuario no encontrado'}), 404
-    db.session.delete(user)
-    db.session.commit()
-    return jsonify({'message': 'Usuario eliminado exitosamente'}), 200
-
-@app.route('/profile/<int:profile_id>', methods=['GET'])
-def get_profile(profile_id):
-    profile = Profile.query.get(profile_id)
-    if not profile:
-        return jsonify({'message': 'Perfil no encontrado'}), 404
-    return jsonify({
-        'id': profile.id,
-        'phone_number': profile.phone_number,
-        'address': profile.address,
-        'description': profile.description,
-        'company_name': profile.company_name,
-        'url_portfolio': profile.url_portfolio,
-        'role': profile.role,
-        'user_id': profile.user_id
-    }), 200
-
-
-#-----------------------------------------SERVICES-----------------------------#
-#-----------------------proveedores puedan añadir servicios que ofrecen.-----------------------------#
 @app.route('/services', methods=['POST'])
-def create_service():
-    if not g.user:
-        return jsonify({'message': 'No autenticado'}), 401
-    
+@jwt_required()
+def add_service():
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if user.profile.role != 'provider':
+        return jsonify({"msg": "Unauthorized"}), 403
     data = request.json
-    profile = Profile.query.filter_by(usuario_id=g.user.id).first()  # Asume que g.user contiene al usuario autenticado
-
-    if not profile:
-        return jsonify({'message': 'Perfil no encontrado para el usuario autenticado'}), 404
-
-    try:
-        new_service = Service(
-            name=data['name'],
-            type=data['type'],
-            price=data['price'],
-            description=data['description'],
-            profile_id=profile.id
-        )
-        db.session.add(new_service)
-        db.session.commit()
-        return jsonify({'id': new_service.id}), 201
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'message': 'Error al crear el servicio', 'error': str(e)}), 500
+    service = Service(
+        name=data['name'],
+        type=data['type'],
+        price=data['price'],
+        description=data['description'],
+        profile_id=user.profile.id
+    )
+    db.session.add(service)
+    db.session.commit()
+    return jsonify({"msg": "Service added", "service_id": service.id}), 201
 
 
-#----------------------- clientes puedan ver los servicios disponibles..-----------------------------#
 @app.route('/services', methods=['GET'])
 def get_services():
-    try:
-        services = Service.query.all()
-        services_data = [{
-            'id': service.id,
-            'name': service.name,
-            'type': service.type,
-            'price': service.price,
-            'description': service.description,
-            'profile_id': service.profile_id,
-            'first_name': service.profile.user.first_name if service.profile and service.profile.user else 'N/A',
-            'last_name': service.profile.user.last_name if service.profile and service.profile.user else 'N/A'
-        } for service in services]
-        return jsonify(services_data), 200
-    except Exception as e:
-        return jsonify({'message': 'Error al obtener los servicios', 'error': str(e)}), 500
+    services = Service.query.all()
+    return jsonify([{
+        "name": service.name,
+        "type": service.type,
+        "price": service.price,
+        "description": service.description
+    } for service in services]), 200
 
-#----------------------- Crear una reserva-Para que los clientes puedan reservar servicios específicos..-----------------------------#
+
 @app.route('/reservations', methods=['POST'])
+@jwt_required()
 def create_reservation():
-    data = request.json
     try:
-        # Convertir la cadena de texto ISO a un objeto datetime de Python
-        if 'date_time_reservation' in data:
-            data['date_time_reservation'] = datetime.fromisoformat(data['date_time_reservation'])
+        data = request.json
+        required_fields = ['status', 'date_time_reservation',
+                           'price', 'provider_id', 'event_package_id']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({"msg": f"Missing field: {field}"}), 422
 
-        # Crear la instancia de la reserva
         reservation = Reservation(
             status=data['status'],
-            date_time_reservation=data['date_time_reservation'],
-            precio=data['precio'],
-            proveedor_id=data['proveedor_id'],
-            paquete_evento_id=data['paquete_evento_id'],
-            usuario_id=data['usuario_id']
+            date_time_reservation=datetime.fromisoformat(
+                data['date_time_reservation']),
+            price=data['price'],
+            provider_id=data['provider_id'],
+            event_package_id=data['event_package_id'],
+            user_id=get_jwt_identity()
         )
         db.session.add(reservation)
         db.session.commit()
-        return jsonify({'message': 'Reserva creada exitosamente'}), 201
+        return jsonify({"msg": "Reservation created", "reservation_id": reservation.id}), 201
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e), 'message': 'Error al crear la reserva'}), 500
-#----------------------- GET RESERVATION.-----------------------------#
+        return jsonify({"msg": "Error creating reservation", "error": str(e)}), 500
+
 
 @app.route('/reservations', methods=['GET'])
+@jwt_required()
 def get_reservations():
-    reservations = Reservation.query.all()
-    reservation_list = [{
-        'id': reservation.id,
-        'name': reservation.service.name,  # Asegúrate de que 'service' está relacionado correctamente en el modelo
-        'date_time_reservation': reservation.date_time_reservation.isoformat(),
-        'guestCount': reservation.guest_count,  # Asume que tienes un campo 'guest_count'
-        'status': reservation.status
-    } for reservation in reservations]
-    return jsonify(reservation_list), 200
+    user_id = get_jwt_identity()
+    reservations = Reservation.query.filter_by(
+        usuario_id=user_id).all()  # Usar usuario_id
+    return jsonify([{
+        "status": reservation.status,
+        "date_time": reservation.date_time_reservation.isoformat(),
+        "price": reservation.price,
+        # Asegúrate de que este campo existe
+        "guestCount": getattr(reservation, 'guest_count', 'N/A'),
+        # Asegúrate de que este campo existe
+        "name": getattr(reservation, 'name', 'N/A')
+    } for reservation in reservations]), 200
+
+############## EVENTOS###################
+
+
+@app.route('/events', methods=['POST'])
+@jwt_required()
+def create_event():
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if user.profile.role != 'Cliente':
+        return jsonify({"msg": "Unauthorized"}), 403
+
+    data = request.json
+    required_fields = ['name', 'date', 'location',
+                       'details', 'guests', 'eventype']
+    for field in required_fields:
+        if field not in data:
+            return jsonify({"msg": f"Missing field: {field}"}), 422
+
+    try:
+        event = Event(
+            name=data['name'],
+            date=datetime.fromisoformat(data['date']),
+            location=data['location'],
+            details=data['details'],
+            guests=data['guests'],
+            eventype=data['eventype'],
+            user_id=user_id
+        )
+        db.session.add(event)
+        db.session.commit()
+        return jsonify({"msg": "Event created", "event_id": event.id}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"msg": "Error creating event", "error": str(e)}), 500
+
+
+@app.route('/events', methods=['GET'])
+def get_all_events():
+    events = Event.query.all()
+    return jsonify([{
+        "id": event.id,
+        "name": event.name,
+        "date": event.date.isoformat(),
+        "location": event.location,
+        "eventype": event.eventype,
+        "details": event.details,
+        "guests": event.guests,
+        "user_id": event.user_id
+    } for event in events]), 200
+
+
+@app.route('/user/<int:user_id>/events', methods=['GET'])
+@jwt_required()
+def get_user_events(user_id):
+    user_id_from_token = get_jwt_identity()
+    if user_id_from_token != user_id:
+        return jsonify({"msg": "Unauthorized"}), 403
+
+    events = Event.query.filter_by(user_id=user_id).all()
+    return jsonify([{
+        "id": event.id,
+        "name": event.name,
+        "date": event.date.isoformat(),
+        "location": event.location,
+        "details": event.details,
+        "guests": event.guests,
+        "eventype": event.eventype,
+        "user_id": event.user_id
+    } for event in events]), 200
+
+        ###### DELETE######
+
+@app.route('/events/<int:event_id>', methods=['DELETE'])
+@jwt_required()
+def delete_event(event_id):
+    user_id = get_jwt_identity()
+    event = Event.query.get(event_id)
+
+    if not event:
+        return jsonify({"msg": "Event not found"}), 404
+
+    if event.user_id != user_id:
+        return jsonify({"msg": "Unauthorized"}), 403
+
+    try:
+        db.session.delete(event)
+        db.session.commit()
+        return jsonify({"msg": "Event deleted"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"msg": "Error deleting event", "error": str(e)}), 500
+
+    
+    ###### PUT######
+
+@app.route('/events/<int:event_id>', methods=['PUT'])
+@jwt_required()
+def update_event(event_id):
+    user_id = get_jwt_identity()
+    event = Event.query.get(event_id)
+
+    if not event:
+        return jsonify({"msg": "Event not found"}), 404
+
+    if event.user_id != user_id:
+        return jsonify({"msg": "Unauthorized"}), 403
+
+    data = request.json
+    allowed_fields = ['name', 'date', 'location',
+                      'details', 'guests', 'eventype']
+
+    for field in allowed_fields:
+        if field in data:
+            setattr(event, field, data[field] if field !=
+                    'date' else datetime.fromisoformat(data[field]))
+
+    try:
+        db.session.commit()
+        return jsonify({"msg": "Event updated", "event_id": event.id}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"msg": "Error updating event", "error": str(e)}), 500
+
 
 if __name__ == '__main__':
     app.run(host='localhost', port=5500, debug=True)

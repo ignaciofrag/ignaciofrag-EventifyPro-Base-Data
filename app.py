@@ -5,7 +5,9 @@ from models import db, User, Profile, Message, Service, SupportTicket, EventPack
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
-from werkzeug.security import generate_password_hash
+from werkzeug.security import generate_password_hash, check_password_hash
+from collections import OrderedDict
+
 
 
 app = Flask(__name__)
@@ -22,13 +24,13 @@ jwt = JWTManager(app)
 # Configurar CORS
 CORS(app)
 
-
+##################################LOGIN################################################################
 @app.route('/user/login', methods=['POST'])
 def login_user():
     email = request.json.get('email', None)
     password = request.json.get('password', None)
     user = User.query.filter_by(email=email).first()
-    if user and user.password == password:  # Aquí también debes considerar usar hashing para las contraseñas
+    if user and check_password_hash(user.password, password):  # Aquí usamos hash para las contraseñas
         access_token = create_access_token(identity=user.id)
         user_info = {
             'id': user.id,
@@ -41,7 +43,7 @@ def login_user():
     else:
         return jsonify({"msg": "Bad username or password"}), 401
 
-########################REGISTRO########################
+########################REGISTRO################################################################
 @app.route('/user', methods=['POST'])
 def create_user():
     data = request.json
@@ -74,24 +76,96 @@ def create_user():
         db.session.rollback()
         return jsonify({"msg": f"Error creating user: {str(e)}"}), 500
 
+#############################OBETENER USUARIOS################################################################
 @app.route('/users', methods=['GET'])
 def get_all_users():
     users = User.query.all()
-    users_list = [{
-        'id': user.id,
-        'email': user.email,
-        'profile': {
+    users_list = [OrderedDict([
+        ('id', user.id),
+        ('first_name', user.first_name),
+        ('last_name', user.last_name),
+        ('email', user.email),
+        ('profile', {
             'phone_number': user.profile.phone_number if user.profile else None,
             'address': user.profile.address if user.profile else None,
             'description': user.profile.description if user.profile else None,
             'company_name': user.profile.company_name if user.profile else None,
             'url_portfolio': user.profile.url_portfolio if user.profile else None,
             'role': user.profile.role if user.profile else None
-        } if user.profile else {}
-    } for user in users]
+        } if user.profile else {})
+    ]) for user in users]
     return jsonify(users_list), 200
 
+##################################################ACTUALIZAR USUARIOS################################################
+@app.route('/user/<int:user_id>', methods=['GET'])
+@jwt_required()
+def get_user(user_id):
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"msg": "User not found"}), 404
 
+    return jsonify({
+        "id": user.id,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "email": user.email,
+        "profile": {
+            "phone_number": user.profile.phone_number,
+            "company_name": user.profile.company_name,
+            "url_portfolio": user.profile.url_portfolio,
+            "role": user.profile.role
+        }
+    }), 200
+
+@app.route('/user/<int:user_id>', methods=['PUT'])
+@jwt_required()
+def update_user(user_id):
+    data = request.json
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"msg": "User not found"}), 404
+
+    try:
+        user.first_name = data.get('first_name', user.first_name)
+        user.last_name = data.get('last_name', user.last_name)
+        user.email = data.get('email', user.email)
+
+        current_password = data.get('currentPassword')
+        new_password = data.get('newPassword')
+        confirm_password = data.get('confirmPassword')
+
+        if current_password and not check_password_hash(user.password, current_password):
+            return jsonify({"msg": "Contraseña actual incorrecta"}), 400
+
+        if new_password and new_password == confirm_password:
+            user.password = generate_password_hash(new_password)
+        elif new_password:
+            return jsonify({"msg": "Las nuevas contraseñas no coinciden"}), 400
+
+        if 'profile' in data:
+            user.profile.phone_number = data['profile'].get('phone_number', user.profile.phone_number)
+            user.profile.company_name = data['profile'].get('company_name', user.profile.company_name)
+            user.profile.url_portfolio = data['profile'].get('url_portfolio', user.profile.url_portfolio)
+            user.profile.role = data['profile'].get('role', user.profile.role)
+
+        db.session.commit()
+        return jsonify({"msg": "User updated successfully", "user": {
+            "id": user.id,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "email": user.email,
+            "profile": {
+                "phone_number": user.profile.phone_number,
+                "company_name": user.profile.company_name,
+                "url_portfolio": user.profile.url_portfolio,
+                "role": user.profile.role
+            }
+        }}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"msg": f"Error updating user: {str(e)}"}), 500
+
+###########################SERVICIOS###############################################################################
 @app.route('/services', methods=['POST'])
 @jwt_required()
 def add_service():
@@ -122,7 +196,7 @@ def get_services():
         "description": service.description
     } for service in services]), 200
 
-
+############################################################RESERVAS################################################
 @app.route('/reservations', methods=['POST'])
 @jwt_required()
 def create_reservation():
@@ -167,7 +241,7 @@ def get_reservations():
         "name": getattr(reservation, 'name', 'N/A')
     } for reservation in reservations]), 200
 
-############## EVENTOS###################
+############## EVENTOS#######################################################################
 
 
 @app.route('/events', methods=['POST'])

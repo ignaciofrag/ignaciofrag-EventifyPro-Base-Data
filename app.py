@@ -30,20 +30,28 @@ def login_user():
     email = request.json.get('email', None)
     password = request.json.get('password', None)
     user = User.query.filter_by(email=email).first()
-    if user and check_password_hash(user.password, password):  # Aquí usamos hash para las contraseñas
+    if user and check_password_hash(user.password, password):
         access_token = create_access_token(identity=user.id)
         user_info = {
             'id': user.id,
             'email': user.email,
             'role': user.profile.role,
             'first_name': user.first_name,
-            'last_name': user.last_name
+            'last_name': user.last_name,
+            'profile': {
+                'phone_number': user.profile.phone_number,
+                'address': user.profile.address,
+                'description': user.profile.description,
+                'company_name': user.profile.company_name,
+                'url_portfolio': user.profile.url_portfolio,
+                'role': user.profile.role
+            }
         }
         return jsonify(access_token=access_token, user=user_info), 200
     else:
         return jsonify({"msg": "Bad username or password"}), 401
 
-########################REGISTRO################################################################
+############################### REGISTRO #########################################
 @app.route('/user', methods=['POST'])
 def create_user():
     data = request.json
@@ -70,7 +78,6 @@ def create_user():
         db.session.commit()
 
         access_token = create_access_token(identity=user.id)
-        
         user_info = {
             'id': user.id,
             'email': user.email,

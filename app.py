@@ -52,7 +52,7 @@ def create_user():
     try:
         user = User(
             email=data['email'],
-            password=generate_password_hash(data['password']),  # Hasheada la contraseña con werkzeug
+            password=generate_password_hash(data['password']),
             first_name=data['first_name'],
             last_name=data['last_name']
         )
@@ -69,9 +69,24 @@ def create_user():
         db.session.add(profile)
         db.session.commit()
 
-        access_token = create_access_token(identity={'email': user.email, 'role': profile.role})
+        access_token = create_access_token(identity=user.id)
+        
+        user_info = {
+            'id': user.id,
+            'email': user.email,
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+            'profile': {
+                'phone_number': profile.phone_number,
+                'address': profile.address,
+                'description': profile.description,
+                'company_name': profile.company_name,
+                'url_portfolio': profile.url_portfolio,
+                'role': profile.role
+            }
+        }
 
-        return jsonify({"msg": "User created successfully", "user_id": user.id, "access_token": access_token}), 201
+        return jsonify({"msg": "User created successfully", "user": user_info, "access_token": access_token}), 201
     except Exception as e:
         db.session.rollback()
         return jsonify({"msg": f"Error creating user: {str(e)}"}), 500

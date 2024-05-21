@@ -198,7 +198,7 @@ def update_user(user_id):
 def add_service():
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
-    if user.profile.role != 'provider':
+    if user.profile.role != 'Proveedor':
         return jsonify({"msg": "Unauthorized"}), 403
     data = request.json
     service = Service(
@@ -212,33 +212,63 @@ def add_service():
     db.session.commit()
     return jsonify({"msg": "Service added", "service_id": service.id}), 201
 
-
 @app.route('/services', methods=['GET'])
 def get_services():
     services = Service.query.all()
     return jsonify([{
+        "id": service.id,
         "name": service.name,
         "type": service.type,
         "price": service.price,
         "description": service.description
     } for service in services]), 200
 
-############################################################RESERVAS################################################
+@app.route('/services/<int:service_id>', methods=['PUT'])
+@jwt_required()
+def update_service(service_id):
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    service = Service.query.get(service_id)
+    if not service:
+        return jsonify({"msg": "Service not found"}), 404
+    if service.profile_id != user.profile.id:
+        return jsonify({"msg": "Unauthorized"}), 403
+    data = request.json
+    service.name = data.get('name', service.name)
+    service.type = data.get('type', service.type)
+    service.price = data.get('price', service.price)
+    service.description = data.get('description', service.description)
+    db.session.commit()
+    return jsonify({"msg": "Service updated"}), 200
+
+@app.route('/services/<int:service_id>', methods=['DELETE'])
+@jwt_required()
+def delete_service(service_id):
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    service = Service.query.get(service_id)
+    if not service:
+        return jsonify({"msg": "Service not found"}), 404
+    if service.profile_id != user.profile.id:
+        return jsonify({"msg": "Unauthorized"}), 403
+    db.session.delete(service)
+    db.session.commit()
+    return jsonify({"msg": "Service deleted"}), 200
+
+############################################################
 @app.route('/reservations', methods=['POST'])
 @jwt_required()
 def create_reservation():
     try:
         data = request.json
-        required_fields = ['status', 'date_time_reservation',
-                           'price', 'provider_id', 'event_package_id']
+        required_fields = ['status', 'date_time_reservation', 'price', 'provider_id', 'event_package_id']
         for field in required_fields:
             if field not in data:
                 return jsonify({"msg": f"Missing field: {field}"}), 422
 
         reservation = Reservation(
             status=data['status'],
-            date_time_reservation=datetime.fromisoformat(
-                data['date_time_reservation']),
+            date_time_reservation=datetime.fromisoformat(data['date_time_reservation']),
             price=data['price'],
             provider_id=data['provider_id'],
             event_package_id=data['event_package_id'],
@@ -251,22 +281,60 @@ def create_reservation():
         db.session.rollback()
         return jsonify({"msg": "Error creating reservation", "error": str(e)}), 500
 
-
 @app.route('/reservations', methods=['GET'])
 @jwt_required()
 def get_reservations():
     user_id = get_jwt_identity()
-    reservations = Reservation.query.filter_by(
-        usuario_id=user_id).all()  # Usar usuario_id
+    reservations = Reservation.query.filter_by(user_id=user_id).all()
     return jsonify([{
+        "id": reservation.id,
         "status": reservation.status,
-        "date_time": reservation.date_time_reservation.isoformat(),
+        "date_time_reservation": reservation.date_time_reservation.isoformat(),
         "price": reservation.price,
-        # Asegúrate de que este campo existe
-        "guestCount": getattr(reservation, 'guest_count', 'N/A'),
-        # Asegúrate de que este campo existe
-        "name": getattr(reservation, 'name', 'N/A')
+        "provider_id": reservation.provider_id,
+        "event_package_id": reservation.event_package_id
     } for reservation in reservations]), 200
+
+@app.route('/reservations/<int:reservation_id>', methods=['PUT'])
+@jwt_required()
+def update_reservation(reservation_id):
+    try:
+        user_id = get_jwt_identity()
+        reservation = Reservation.query.get(reservation_id)
+        if not reservation:
+            return jsonify({"msg": "Reservation not found"}), 404
+        if reservation.user_id != user_id:
+            return jsonify({"msg": "Unauthorized"}), 403
+
+        data = request.json
+        reservation.status = data.get('status', reservation.status)
+        reservation.date_time_reservation = datetime.fromisoformat(data['date_time_reservation']) if 'date_time_reservation' in data else reservation.date_time_reservation
+        reservation.price = data.get('price', reservation.price)
+        reservation.provider_id = data.get('provider_id', reservation.provider_id)
+        reservation.event_package_id = data.get('event_package_id', reservation.event_package_id)
+        db.session.commit()
+        return jsonify({"msg": "Reservation updated"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"msg": "Error updating reservation", "error": str(e)}), 500
+
+@app.route('/reservations/<int:reservation_id>', methods=['DELETE'])
+@jwt_required()
+def delete_reservation(reservation_id):
+    try:
+        user_id = get_jwt_identity()
+        reservation = Reservation.query.get(reservation_id)
+        if not reservation:
+            return jsonify({"msg": "Reservation not found"}), 404
+        if reservation.user_id != user_id:
+            return jsonify({"msg": "Unauthorized"}), 403
+
+        db.session.delete(reservation)
+        db.session.commit()
+        return jsonify({"msg": "Reservation deleted"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"msg": "Error deleting reservation", "error": str(e)}), 500
 
 ############## EVENTOS#######################################################################
 

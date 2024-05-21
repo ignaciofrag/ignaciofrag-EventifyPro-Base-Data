@@ -97,6 +97,11 @@ def create_user():
     except Exception as e:
         db.session.rollback()
         return jsonify({"msg": f"Error creating user: {str(e)}"}), 500
+    
+
+    ##############################GOOGLE REGISTRO################################################
+
+    
 
 #############################OBETENER USUARIOS################################################################
 @app.route('/users', methods=['GET'])
@@ -322,6 +327,9 @@ def get_user_events(user_id):
         return jsonify({"msg": "Unauthorized"}), 403
 
     events = Event.query.filter_by(user_id=user_id).all()
+    if not events:
+        return jsonify([]), 200
+
     return jsonify([{
         "id": event.id,
         "name": event.name,
@@ -371,13 +379,11 @@ def update_event(event_id):
         return jsonify({"msg": "Unauthorized"}), 403
 
     data = request.json
-    allowed_fields = ['name', 'date', 'location',
-                      'details', 'guests', 'eventype']
+    allowed_fields = ['name', 'date', 'location', 'details', 'guests', 'eventype']
 
     for field in allowed_fields:
         if field in data:
-            setattr(event, field, data[field] if field !=
-                    'date' else datetime.fromisoformat(data[field]))
+            setattr(event, field, data[field] if field != 'date' else datetime.fromisoformat(data[field]))
 
     try:
         db.session.commit()

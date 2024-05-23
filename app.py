@@ -123,6 +123,22 @@ def get_all_users():
     ]) for user in users]
     return jsonify(users_list), 200
 
+@app.route('/user/me', methods=['GET'])
+@jwt_required()
+def get_user_info():
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"msg": "User not found"}), 404
+
+    return jsonify({
+        "id": user.id,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "email": user.email,
+        "role": user.profile.role
+    }), 200
+
 ##################################################ACTUALIZAR USUARIOS################################################
 @app.route('/user/<int:user_id>', methods=['GET'])
 @jwt_required()
@@ -191,6 +207,8 @@ def update_user(user_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({"msg": f"Error updating user: {str(e)}"}), 500
+    
+    
 
 ###########################SERVICIOS###############################################################################
 @app.route('/services', methods=['POST'])
@@ -211,16 +229,49 @@ def add_service():
     db.session.add(service)
     db.session.commit()
     return jsonify({"msg": "Service added", "service_id": service.id}), 201
-
 @app.route('/services', methods=['GET'])
 def get_services():
-    services = Service.query.all()
+    service_type = request.args.get('type', None)
+    query = Service.query
+
+    if service_type:
+        query = query.filter(Service.type == service_type)
+
+    services = query.all()
+    services_list = []
+    for service in services:
+        profile = service.profile
+        if profile:
+            user = profile.user
+            if user:
+                services_list.append({
+                    "id": service.id,
+                    "name": service.name,
+                    "type": service.type,
+                    "price": service.price,
+                    "description": service.description,
+                    "location": service.location,
+                    "provider_first_name": user.first_name,
+                    "provider_last_name": user.last_name,
+                    "company_name": profile.company_name
+                })
+    return jsonify(services_list), 200
+
+@app.route('/provider/<int:provider_id>/services', methods=['GET'])
+@jwt_required()
+def get_provider_services(provider_id):
+    user_id_from_token = get_jwt_identity()
+    if user_id_from_token != provider_id:
+        return jsonify({"msg": "Unauthorized"}), 403
+    
+    services = Service.query.filter_by(profile_id=provider_id).all()
     return jsonify([{
         "id": service.id,
         "name": service.name,
         "type": service.type,
         "price": service.price,
-        "description": service.description
+        "description": service.description,
+        "location": service.location  # Incluir la ubicación
     } for service in services]), 200
 
 @app.route('/services/<int:service_id>', methods=['PUT'])
@@ -238,8 +289,10 @@ def update_service(service_id):
     service.type = data.get('type', service.type)
     service.price = data.get('price', service.price)
     service.description = data.get('description', service.description)
+    service.location = data.get('location', service.location)  # Añadir este campo
     db.session.commit()
     return jsonify({"msg": "Service updated"}), 200
+
 
 @app.route('/services/<int:service_id>', methods=['DELETE'])
 @jwt_required()

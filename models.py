@@ -63,10 +63,10 @@ class Service(db.Model):
     type = db.Column(db.String(50), nullable=False)
     price = db.Column(db.Float)
     description = db.Column(db.Text)
+    location = db.Column(db.String(200))  # Añadir este campo
     profile_id = db.Column(db.Integer, db.ForeignKey('profile.id'))
     reviews = db.relationship('Review', backref='service')
     media = db.relationship('Media', backref='service')
-
 
 class SupportTicket(db.Model):
     __tablename__ = 'support_ticket'

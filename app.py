@@ -529,6 +529,8 @@ def get_user_reservations(user_id):
             "email_contacto": provider_profile.user.email,
             "phone_number": provider_profile.phone_number,
             "address": provider_profile.address,
+            "service_name": service.name,  # Nombre del servicio
+            "service_type": service.type,  # Tipo de servicio
             "created_at": reservation.created_at.isoformat()
         })
 

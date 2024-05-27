@@ -1,6 +1,6 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from flask_sqlalchemy import SQLAlchemy
-import datetime
+from enum import Enum  
 
 db = SQLAlchemy()
 
@@ -12,10 +12,12 @@ class User(db.Model):
     email = db.Column(db.String(200), nullable=False, unique=True)
     first_name = db.Column(db.String(100), nullable=False)
     last_name = db.Column(db.String(100), nullable=False)
+    
     profile = db.relationship('Profile', backref='user', uselist=False)
     tickets = db.relationship('SupportTicket', backref='user')
     reviews = db.relationship('Review', backref='user')
     events = db.relationship('Event', back_populates='user')  # Cambiado a back_populates
+    reservations = db.relationship('Reservation', back_populates='user')
 
 
 class Profile(db.Model):
@@ -28,9 +30,8 @@ class Profile(db.Model):
     url_portfolio = db.Column(db.String(200))
     role = db.Column(db.String(50))
     usuario_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    services = db.relationship('Service', backref='profile')
-
-    # Especificar las llaves foráneas para evitar ambigüedades en las relaciones
+    
+    services = db.relationship('Service', back_populates='profile')
     messages_sent = db.relationship(
         'Message',
         foreign_keys='[Message.client_id]',
@@ -41,8 +42,9 @@ class Profile(db.Model):
         foreign_keys='[Message.provider_id]',
         backref=db.backref('provider', lazy='joined')
     )
-    event_packs = db.relationship('EventPack', backref='profile')
-    reservations = db.relationship('Reservation', backref='profile')
+    event_packs = db.relationship('EventPack', back_populates='profile')
+    reservations_as_proveedor = db.relationship('Reservation', foreign_keys='[Reservation.proveedor_id]', back_populates='proveedor')
+
 
 
 class Message(db.Model):
@@ -53,7 +55,7 @@ class Message(db.Model):
         'profile.id'), nullable=False)
     provider_id = db.Column(
         db.Integer, db.ForeignKey('profile.id'), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow())
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 
 
 class Service(db.Model):
@@ -65,8 +67,14 @@ class Service(db.Model):
     description = db.Column(db.Text)
     location = db.Column(db.String(200))  # Añadir este campo
     profile_id = db.Column(db.Integer, db.ForeignKey('profile.id'))
+
+    profile = db.relationship('Profile', back_populates='services')
+    reservations = db.relationship('Reservation', back_populates='service')
     reviews = db.relationship('Review', backref='service')
     media = db.relationship('Media', backref='service')
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+
 
 class SupportTicket(db.Model):
     __tablename__ = 'support_ticket'
@@ -83,6 +91,10 @@ class EventPack(db.Model):
     description = db.Column(db.Text, nullable=False)
     price = db.Column(db.Float)
     provider_id = db.Column(db.Integer, db.ForeignKey('profile.id'))
+    
+    profile = db.relationship('Profile', back_populates='event_packs')
+    reservations_as_event_pack = db.relationship('Reservation', foreign_keys='[Reservation.paquete_evento_id]', back_populates='event_pack')
+
 
 
 class Media(db.Model):
@@ -102,19 +114,29 @@ class Promotion(db.Model):
     price = db.Column(db.Float)
     provider_id = db.Column(db.Integer, db.ForeignKey('profile.id'))
 
+class ReservationStatus(Enum):
+    PENDING = "PENDING"
+    CONFIRMED = "CONFIRMED"
+    CANCELLED = "CANCELLED"
+    COMPLETED = "COMPLETED"
 
 class Reservation(db.Model):
     __tablename__ = 'reservation'
     id = db.Column(db.Integer, primary_key=True)
-    status = db.Column(db.String(50), nullable=False)
-    date_time_reservation = db.Column(db.DateTime)
-    precio = db.Column(db.Float)
-    proveedor_id = db.Column(db.Integer, db.ForeignKey('event_pack.id'))
-    paquete_evento_id = db.Column(db.Integer, db.ForeignKey('profile.id'))
-    usuario_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    # Asegúrate de que 'service' es correcto
-    service_id = db.Column(db.Integer, db.ForeignKey('service.id'))
-    service = db.relationship('Service', backref='reservations')
+    status = db.Column(db.Enum(ReservationStatus), nullable=False, default=ReservationStatus.PENDING)
+    date_time_reservation = db.Column(db.DateTime, nullable=False)
+    precio = db.Column(db.Float, nullable=False)
+    proveedor_id = db.Column(db.Integer, db.ForeignKey('profile.id'), nullable=False)
+    paquete_evento_id = db.Column(db.Integer, db.ForeignKey('event_pack.id'), nullable=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    service_id = db.Column(db.Integer, db.ForeignKey('service.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    service = db.relationship('Service', back_populates='reservations')
+    user = db.relationship('User', back_populates='reservations')
+    proveedor = db.relationship('Profile', foreign_keys=[proveedor_id], back_populates='reservations_as_proveedor')
+    event_pack = db.relationship('EventPack', foreign_keys=[paquete_evento_id], back_populates='reservations_as_event_pack')
+
 
 
 class Review(db.Model):
@@ -138,6 +160,8 @@ class Event(db.Model):
     eventype = db.Column(db.String(255), nullable=False, server_default='Default')
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     user = db.relationship('User', back_populates='events')
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
 
 def __repr__(self):
     return f'<Event {self.name}>'

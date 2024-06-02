@@ -316,14 +316,23 @@ def delete_service(service_id):
     user_id = get_jwt_identity()
     user = db.session.get(User, user_id)
     service = db.session.get(Service, service_id)
+    
     if not service:
         return jsonify({"msg": "Service not found"}), 404
     if service.profile_id != user.profile.id:
         return jsonify({"msg": "Unauthorized"}), 403
-    db.session.delete(service)
-    db.session.commit()
-    return jsonify({"msg": "Service deleted"}), 200
+    
+    # Verificar si existen reservas asociadas al servicio
+    if Reservation.query.filter_by(service_id=service_id).count() > 0:
+        return jsonify({"msg": "No se puede eliminar el servicio porque tiene reservas asociadas"}), 400
 
+    try:
+        db.session.delete(service)
+        db.session.commit()
+        return jsonify({"msg": "Service deleted"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"msg": f"Error deleting service: {str(e)}"}), 500
 ############### EVENTOS ##############################################
 @app.route('/events', methods=['POST'])
 @jwt_required()
